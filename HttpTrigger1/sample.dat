@@ -1,0 +1,9 @@
+{
+    "name": "Azure"
+    "NSG" = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourceGroups/brueforce/providers/Microsoft.Network/networkSecurityGroups/target-nsg"
+    "resourceID" = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourcegroups/brueforce/providers/microsoft.compute/virtualMachines/target"
+    "private_IP" = "10.0.0.5"
+    "dst_port" = "8081"
+    "src_ip" = "111.19.141.82"
+    "protocol" = "TCP"
+}
