@@ -144,10 +144,11 @@ def update_or_append_a_rule(NSG_Rules, private_IP, dst_port, src_ip, protocol): 
         if bool1 or bool2 or bool3:
             return rule["name"], write_JSON(DST_IP, DST_PORT, SRC_IP, rule["priority"], rule["protocol"]) 
         else: #새로운 rule 추가
-            name = f"MDCAutomation_src_공격아이피_{private_IP}_ALL_ALL_deny_ 시간"
-            return None, write_JSON(DST_IP, DST_PORT, SRC_IP, search_unoccupied_priority(NSG_Rules), "*")
-    
-    return None, False #?이미 같은 룰이 있는데 보안 경고가 울린 경우는?? 이 경우도 고려해야할지?       
+            continue
+
+    name = f"MDCAutomation_src_{src_ip}_{private_IP}_ALL_ALL_deny_ 시간"
+    return None, write_JSON(private_IP, dst_port, src_ip, search_unoccupied_priority(NSG_Rules), "*")
+    #?이미 같은 룰이 있는데 보안 경고가 울린 경우는?? 이 경우도 고려해야할지?       
 
 #* Destination IP Address 체크
 def check_dst_ip(rule, private_IP):
@@ -197,6 +198,7 @@ def check_dst_port(rule, dst_port):
         logging.warning('"destinationPortRanges" does not exist.')
 
 #* Source IP Address 체크
+#TODO: 공격자 IP 리스트 : 기존 SRC_IP 대조하는 로직 추가해야함
 def check_src_ip(rule, src_ip):
     try: #규칙에서 찾는 인덱스가 없을 수 있음
         if rule["sourceAddressPrefix"] : #source IP Address에 값이 있는 경우
@@ -226,17 +228,17 @@ def check_src_ip(rule, src_ip):
 
 #* NSG규칙 수정 및 생성 
 def PUT_NSG_Rule(url, token, JSON):
-    headers = {'Content-Type': 'application/json', 'Authorization': "Bearer " + token, 'Host': 'management.azure.com'}
+    headers = {'Content-Type': 'application/json', 'Authorization': "Bearer " + token}
     res = requests.put(url, headers=headers, data=json.dumps(JSON))
-    json_data = res.json()
-    result = json_data["status_code"]
 
-    if result == 200:
+    if res.status_code == 200:
         logging.info("Update a NSG Rule successfully.")
-    elif result == 201:
+    elif res.status_code == 201:
         logging.info("Create a NSG Rule successfully.")
+    else :
+        logging.error("PUT a NSG Rule failed")
         
-    return result
+    return res.status_code
 
 #* 포트 범위 인지, 포트 번호만 있는지 확인 후 포트가 포함되었는지까지 확인
 def port_check(port_string, port):
@@ -276,19 +278,27 @@ def search_unoccupied_priority(rules): #TODO: 2000이상 우선순위가 비어�
     if not p_list :
         return rules[-1]["priority"]+1      #빈 번호가 없다면, 존재하는 규칙 중 가장 마지막 우선순위+1 값 리턴
 
-#* NSG Rule json 작성
+#TODO: NSG Rule json 작성
 def write_JSON(dst_ip, dst_port, src_ip, priority, protocol):
-    JSON = {
-        "properties": {
-            "access": "Deny",
-            "destinationAddressPrefixes": dst_ip,
-            "destinationPortRanges": dst_port,
-            "direction": "Inbound",
-            "priority": priority,
-            "protocol": protocol,
-            "sourceAddressPrefixes": src_ip,
-            "sourcePortRange": "*"
-        }
-    }
+    str_json = "{{\"properties\": {\"access\": \"Deny\",\"direction\": \"Inbound\","+"\"sourcePortRange\": \"*\", "
+    
+    if type(src_ip) is list :
+        str_json = str_json+"\"sourceAddressPrefixes\": ".join([src_ip])+", "
+    else :
+        str_json = str_json+"\"sourceAddressPrefix\": \""+src_ip+"\", "
 
-    return JSON
+    if type(dst_ip) is list :
+        str_json = str_json+"\"destinationAddressPrefixes\": ".join([dst_ip])+", "
+    else :
+        str_json = str_json+"\"destinationAddressPrefix\": \""+dst_ip+"\", "
+    
+    if type(dst_port) is list :
+        str_json = str_json+"\"destinationPortRanges\": ".join([dst_port])+", "
+    else :
+        str_json = str_json+"\"destinationPortRange\": \""+dst_port+"\", "
+
+    JSON = str_json+"\"priority\": \""+str(priority)+"\", "
+    JSON = str_json+"\"protocol\": \""+protocol+"\"}}"
+
+
+    return json.dumps(JSON)
