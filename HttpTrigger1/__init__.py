@@ -278,27 +278,33 @@ def search_unoccupied_priority(rules): #TODO: 2000이상 우선순위가 비어�
     if not p_list :
         return rules[-1]["priority"]+1      #빈 번호가 없다면, 존재하는 규칙 중 가장 마지막 우선순위+1 값 리턴
 
-#TODO: NSG Rule json 작성
+#* NSG Rule json 작성
 def write_JSON(dst_ip, dst_port, src_ip, priority, protocol):
-    str_json = "{{\"properties\": {\"access\": \"Deny\",\"direction\": \"Inbound\","+"\"sourcePortRange\": \"*\", "
-    
+    JSON = {
+        "properties": {
+            "access" : "Deny",
+            "direction" : "Inbound",
+            "sourcePortRange" : "*",
+            "priority" : priority,
+            "protocol" : protocol 
+        }
+    }
+
     if type(src_ip) is list :
-        str_json = str_json+"\"sourceAddressPrefixes\": ".join([src_ip])+", "
+        JSON['properties']['sourceAddressPrefixes'] =src_ip
     else :
-        str_json = str_json+"\"sourceAddressPrefix\": \""+src_ip+"\", "
+        JSON ['properties']['sourceAddressPrefix'] =src_ip
+
 
     if type(dst_ip) is list :
-        str_json = str_json+"\"destinationAddressPrefixes\": ".join([dst_ip])+", "
-    else :
-        str_json = str_json+"\"destinationAddressPrefix\": \""+dst_ip+"\", "
+        JSON['properties']['destinationAddressPrefixes'] =dst_ip
+    else : 
+        JSON['properties']['destinationAddressPrefix'] =dst_ip
     
+
     if type(dst_port) is list :
-        str_json = str_json+"\"destinationPortRanges\": ".join([dst_port])+", "
+        JSON['properties']['destinationPortRanges'] = dst_port
     else :
-        str_json = str_json+"\"destinationPortRange\": \""+dst_port+"\", "
+        JSON['properties']['destinationPortRange'] =dst_port
 
-    JSON = str_json+"\"priority\": \""+str(priority)+"\", "
-    JSON = str_json+"\"protocol\": \""+protocol+"\"}}"
-
-
-    return json.dumps(JSON)
+    return JSON
