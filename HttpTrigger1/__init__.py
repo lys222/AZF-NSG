@@ -69,12 +69,12 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     #if parm:
     #   return func.HttpResponse(f""", status_code=result) #TODO:로직앱에 던져 줄 값 : 수정, 생성 된 규칙 내용
-    if NSG:
+    if result:
     #     return func.HttpResponse(f"{r_JSON}", status_code=201)
     # else:
         return func.HttpResponse(
-            "This HTTP triggered function executed successfully. Pass a NSG in the query string or in the request body for a personalized response.",
-            status_code=200
+            "This HTTP triggered function executed. Check status_code.",
+            status_code=result
         )
 
 #* 액세스 토큰 받아오기
@@ -160,7 +160,9 @@ def check_dst_ip(rule, private_IP):
             if rule["destinationAddressPrefix"] == private_IP : #private_IP를 포함하는 경우
                 return False, rule["destinationAddressPrefix"]
             
-            return True, rule["destinationAddressPrefixes"].append(private_IP) #기존 string ip를 리스트에 합쳐야할 경우  
+            rule["destinationAddressPrefixes"].append(rule["destinationAddressPrefix"])
+            rule["destinationAddressPrefixes"].append(private_IP)
+            return True, rule["destinationAddressPrefixes"] #기존 string ip를 리스트에 합쳐야할 경우  
     except KeyError:
         logging.warning('"destinationAddressPrefix" does not exist.')
 
@@ -169,7 +171,8 @@ def check_dst_ip(rule, private_IP):
             if private_IP in rule["destinationAddressPrefixes"] :  #범위에 private_IP를 포함하는 경우
                 return False, rule["destinationAddressPrefixes"]
             
-            return True, rule["destinationAddressPrefixes"].append(private_IP) #리스트에 ip를 추가해야할 경우
+            rule["destinationAddressPrefixes"].append(private_IP)
+            return True, rule["destinationAddressPrefixes"] #리스트에 ip를 추가해야할 경우
     except KeyError:
         logging.warning('"destinationAddressPrefixes" does not exist.') #문자열, 리스트 둘 중 하나는 반드시 값이 있음. 
 
@@ -180,20 +183,23 @@ def check_dst_port(rule, dst_port):
             if rule["destinationPortRange"] == "*" : #all port인 경우
                 return False, rule["destinationPortRange"]
 
-            if not port_check(rule["destinationPortRange"], dst_port): #dst_port를 포함하는지 확인
+            if port_check(rule["destinationPortRange"], dst_port): #dst_port를 포함하는지 확인
                 return False, rule["destinationPortRange"]
             
-            return True, rule["destinationPortRanges"].append(dst_port) #기존 port를 리스트에 합쳐야할 경우
+            rule["destinationPortRanges"].append(rule["destinationPortRange"])
+            rule["destinationPortRanges"].append(dst_port)
+            return True, rule["destinationPortRanges"] #기존 port를 리스트에 합쳐야할 경우
     except KeyError:
         logging.warning('"destinationPortRange" does not exist.')
 
     try:
         if rule["destinationPortRanges"]:  #destination Port 리스트에 값이 있는 경우
             for port_string in rule["destinationPortRanges"]: #여러 범위들 중 dst_port가 포함되어 있는지 확인
-                if not port_check((port_string), dst_port):
+                if port_check((port_string), dst_port):
                     return False, rule["destinationPortRanges"]
                 
-            return True, rule["destinationPortRanges"].append(dst_port) #리스트에 port를 추가해야할 경우
+            rule["destinationPortRanges"].append(dst_port)
+            return True, rule["destinationPortRanges"] #리스트에 port를 추가해야할 경우
     except KeyError:
         logging.warning('"destinationPortRanges" does not exist.')
 
@@ -202,27 +208,30 @@ def check_dst_port(rule, dst_port):
 def check_src_ip(rule, src_ip):
     try: #규칙에서 찾는 인덱스가 없을 수 있음
         if rule["sourceAddressPrefix"] : #source IP Address에 값이 있는 경우
-            if rule["destinationAddressPrefix"] == "*" : #범위가 all IP인 경우
-                return False, rule["destinationAddressPrefix"]
+            if rule["sourceAddressPrefix"] == "*" : #범위가 all IP인 경우
+                return False, rule["sourceAddressPrefix"]
             
-            if type(src_ip) is str and rule["destinationAddressPrefix"] == src_ip : #src_IP를 포함하는 경우
-                return False, rule["destinationAddressPrefix"]
+            if type(src_ip) is str and rule["sourceAddressPrefix"] == src_ip : #src_IP를 포함하는 경우
+                return False, rule["sourceAddressPrefix"]
             
-            return True, rule["sourceAddressPrefixes"].append(src_ip) #기존 string ip를 리스트에 합쳐야할 경우   
+            rule["sourceAddressPrefixes"].append(rule["sourceAddressPrefix"])
+            rule["sourceAddressPrefixes"].append(src_ip)
+            return True, rule["sourceAddressPrefixes"] #기존 string ip를 리스트에 합쳐야할 경우   
     except KeyError:
         logging.warning('"sourceAddressPrefix" does not exist.')
     
     try:
         if rule["sourceAddressPrefixes"]: #source IP Address 리스트에 값이 있는 경우
-            if type(src_ip) is str and src_ip in rule["destinationAddressPrefixes"] : #범위에 단수 src_IP를 포함하는 경우
+            if type(src_ip) is str and src_ip in rule["sourceAddressPrefixes"] : #범위에 단수 src_IP를 포함하는 경우
                 return False, rule["destinationAddressPrefixes"]
             if type(src_ip) is list: #범위에 복수 src_IP를 포함하는 경우
                 set_a = set(src_ip)
-                set_b = set(rule["destinationAddressPrefixes"])
+                set_b = set(rule["sourceAddressPrefixes"])
                 if not set_a - set_b:
-                    return False, rule["destinationAddressPrefixes"]
+                    return False, rule["sourceAddressPrefixes"]
             
-            return True, rule["destinationAddressPrefixes"].append(src_ip) #리스트에 ip를 추가해야할 경우
+            rule["sourceAddressPrefixes"].append(src_ip)
+            return True, rule["sourceAddressPrefixes"] #리스트에 ip를 추가해야할 경우
     except KeyError:
         logging.warning('"sourceAddressPrefixes" does not exist.')
 
@@ -242,7 +251,7 @@ def PUT_NSG_Rule(url, token, JSON):
 
 #* 포트 범위 인지, 포트 번호만 있는지 확인 후 포트가 포함되었는지까지 확인
 def port_check(port_string, port):
-    if port_string in '-': #포트 범위
+    if '-' in port_string: #포트 범위
         return port_in_range(port_string, port)
     elif port_string == port: #포트 번호
         return False
@@ -257,13 +266,16 @@ def port_in_range(port_range, port):
         return True
 
 #* 미사용 우선순위 번호 찾기
-def search_unoccupied_priority(rules): #TODO: 2000이상 우선순위가 비어있지 않고 연속하는 경우
+def search_unoccupied_priority(rules):
     global init_num
     p_list = []
 
     for i in range(len(rules)):
         if rules[i]["priority"] < init_num:     #2000이하 규칙은 무시
             continue
+
+        if rules[-1]["priority"] - rules[i]["priority"] + 1 == len(rules):  #2000이상 우선순위가 비어있지 않고 연속하는 경우
+            break
 
         if i < len(rules):
             forth_num = rules[i]["priority"]
