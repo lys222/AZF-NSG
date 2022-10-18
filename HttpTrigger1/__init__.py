@@ -10,72 +10,64 @@ from datetime import datetime
 #TODO: 모듈 분리
 init_num = 2001
 
-
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
     #로직앱에서 트리거 된 변수 값  가져오기
-    '''
     param = {
         "NSG" : req.params.get('NSG'),
         "resourceID" : req.params.get('resourceID'),
-        "private_IP" : req.params.get('privateIP')
+        "private_IP" : req.params.get('privateIP'),
+        "dst_port" : req.params.get('dst_port'),
+        "src_ip" : req.params.get('src_ip'), 
+        "protocol" : req.params.get('protocol')
     }
     logging.info('GET parameters from Logic Apps.')
-    '''
-    #attacker_IP_info = req.params.get('table') 
-    #TODO: 필요한 파라미터들을 묶어서 Dictionary로 사용
 
-    # if not NSG: #NSG가 NULL 값인지 확인
-    #     try:
-    #         req_body = req.get_json()
-    #     except ValueError:
-    #         pass
-    #     else:
-    #         NSG = req_body.get('NSG')
+    # #!로컬 테스트를 위해서 임시로 값 설정
+    # NSG = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourceGroups/brueforce/providers/Microsoft.Network/networkSecurityGroups/target-nsg"
+    # resourceID = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourcegroups/brueforce/providers/microsoft.compute/virtualMachines/target"
+    # private_IP = "10.1.0.5"
+    # dst_port = "8081"
+    # src_ip = ["111.19.141.80", "111.19.141.81"]
+    # protocol = "TCP"
 
-    #!로컬 테스트를 위해서 임시로 값 설정
-    NSG = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourceGroups/brueforce/providers/Microsoft.Network/networkSecurityGroups/target-nsg"
-    resourceID = "/subscriptions/c79dd4b6-6951-4546-8573-0b6f972e072d/resourcegroups/brueforce/providers/microsoft.compute/virtualMachines/target"
-    private_IP = "10.1.0.5"
-    dst_port = "8081"
-    src_ip = "111.19.141.80"
-    protocol = "TCP"
-
-    #TODO: 로직앱에서 파라미터 받았을때만 동작하도록
     # #TODO: 로직앱으로 트리거 받는 부분 제외하고 싹 다 클래스로 만들기~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     bearer_token = post_ad_access_token()
     
+    NSG = param["NSG"]
     URL = f"https://management.azure.com{NSG}/securityRules?api-version=2020-05-01"
     origin_NSG_Rules = GET_NSG_Rule_List(URL,bearer_token)     #NSG Rule 목록 가져오기
 
     modified_NSG_Rules = sort_NSG_List(origin_NSG_Rules)    #데이터 구조 변형
 
-    rule_name, r_JSON = update_or_append_a_rule(modified_NSG_Rules, private_IP, dst_port, src_ip, protocol) #규칙 수정, 추가 여부 판단
+    rule_name, r_JSON = update_or_append_a_rule(modified_NSG_Rules, param) #규칙 수정, 추가 여부 판단
 
     if not r_JSON :
         pass
     else :
         if rule_name:
             URL = f"https://management.azure.com{NSG}/securityRules/{rule_name}?api-version=2020-05-01"
-            logging.info('NSG Rule will be updated')
+            logging.info('NSG Rule will be updated.')
         else:
+            src_ip = param["src_ip"]
+            private_IP = param["private_IP"]
+            dst_port = param["dst_port"]
+            protocol = param["protocol"]
             time = datetime.now(timezone('Asia/Seoul')).strftime('%Y-%m-%dT%H:%M:%S')
             URL = f"https://management.azure.com{NSG}/securityRules/MDCAutomation_src_{src_ip}_dst_{private_IP}_{dst_port}_{protocol}_deny_{time}?api-version=2020-05-01"
-            logging.info('NSG Rule will be created')
+            logging.info('NSG Rule will be created.')
         
         result = PUT_NSG_Rule(URL, bearer_token, r_JSON)
 
-    #if parm:
-    #   return func.HttpResponse(f""", status_code=result) #TODO:로직앱에 던져 줄 값 : 수정, 생성 된 규칙 내용
-    if result:
-    #     return func.HttpResponse(f"{r_JSON}", status_code=201)
-    # else:
+    #* 로직앱에 던져 줄 값 : 상태 코드, 수정 및 생성 된 규칙 내용
+    if result and r_JSON :
         return func.HttpResponse(
             "This HTTP triggered function executed. Check status_code.",
-            status_code=result
+            status_code=result, text=r_JSON
         )
+        exit()
 
 #* 액세스 토큰 받아오기
 def post_ad_access_token():
@@ -92,18 +84,18 @@ def post_ad_access_token():
     access_token = token_response.get('accessToken')
 
     if not access_token:
-        logging.info('Access token received from Azure')
+        logging.info('Access token received from Azure.')
     
     return access_token
 
 #* REST로 GET 요청
 def GET_NSG_Rule_List(url, token):
     headers = {'Content-Type': 'application/json', 'Authorization':"Bearer "+token, 'Host':'management.azure.com'}
-    res = requests.get(url, headers=headers)
+    res = requests.get(url, headers=headers, verify=False)
     json_data = res.json()
 
     JSON = json_data["value"]
-    logging.info('GET NSG rule list successfully')
+    logging.info('GET NSG rule list successfully.')
 
     return JSON
 
@@ -117,15 +109,20 @@ def sort_NSG_List(raw_data):
         rule.pop("type")
         for key in property:
             rule[key] = property[key]
-    logging.info('Modify NSG rule list successfully')
+    logging.info('Modify NSG rule list successfully.')
 
     sorted_data = sorted(raw_data, key=lambda x:x["priority"])
-    logging.info('Sort NSG rule list successfully')
+    logging.info('Sort NSG rule list successfully.')
 
     return sorted_data
 
 #* NSG 규칙 수정해야하는지, 새로 추가해야하는지 판단
-def update_or_append_a_rule(NSG_Rules, private_IP, dst_port, src_ip, protocol): #TODO: 정보값 파라미터들 -> 리스트 OR 딕셔너리로 묶어서 넣던가, 클래스 만들어서 받기
+def update_or_append_a_rule(NSG_Rules, param):
+    protocol = param["protocol"]
+    private_IP = param["private_IP"]
+    dst_port = param["dst_port"]
+    src_ip = param["src_ip"]
+
     for rule in NSG_Rules:
         #Inbound Deny rule이 아니면 다음 rule으로 넘어감
         if rule["direction"] != "Inbound" or rule["access"] != "Deny" : 
@@ -204,7 +201,6 @@ def check_dst_port(rule, dst_port):
         logging.warning('"destinationPortRanges" does not exist.')
 
 #* Source IP Address 체크
-#TODO: 공격자 IP 리스트 : 기존 SRC_IP 대조하는 로직 추가해야함
 def check_src_ip(rule, src_ip):
     try: #규칙에서 찾는 인덱스가 없을 수 있음
         if rule["sourceAddressPrefix"] : #source IP Address에 값이 있는 경우
@@ -215,23 +211,31 @@ def check_src_ip(rule, src_ip):
                 return False, rule["sourceAddressPrefix"]
             
             rule["sourceAddressPrefixes"].append(rule["sourceAddressPrefix"])
-            rule["sourceAddressPrefixes"].append(src_ip)
+            if type(src_ip) is str:
+                rule["sourceAddressPrefixes"].append(src_ip)
+            if type(src_ip) is list: 
+                rule["sourceAddressPrefixes"].extend(src_ip)
+                
             return True, rule["sourceAddressPrefixes"] #기존 string ip를 리스트에 합쳐야할 경우   
     except KeyError:
         logging.warning('"sourceAddressPrefix" does not exist.')
     
     try:
         if rule["sourceAddressPrefixes"]: #source IP Address 리스트에 값이 있는 경우
-            if type(src_ip) is str and src_ip in rule["sourceAddressPrefixes"] : #범위에 단수 src_IP를 포함하는 경우
-                return False, rule["destinationAddressPrefixes"]
+            if type(src_ip) is str :
+                if src_ip in rule["sourceAddressPrefixes"] : #범위에 단수 src_IP를 포함하는 경우
+                    return False, rule["destinationAddressPrefixes"]
+                else :
+                    rule["sourceAddressPrefixes"].append(src_ip)
+                    return True, rule["sourceAddressPrefixes"]
             if type(src_ip) is list: #범위에 복수 src_IP를 포함하는 경우
                 set_a = set(src_ip)
                 set_b = set(rule["sourceAddressPrefixes"])
-                if not set_a - set_b:
+                result_set = set_a - set_b
+                if not result_set:
                     return False, rule["sourceAddressPrefixes"]
-            
-            rule["sourceAddressPrefixes"].append(src_ip)
-            return True, rule["sourceAddressPrefixes"] #리스트에 ip를 추가해야할 경우
+                rule["sourceAddressPrefixes"].extend(result_set)
+                return True, rule["sourceAddressPrefixes"] #리스트에 ip를 추가해야할 경우
     except KeyError:
         logging.warning('"sourceAddressPrefixes" does not exist.')
 
@@ -245,7 +249,7 @@ def PUT_NSG_Rule(url, token, JSON):
     elif res.status_code == 201:
         logging.info("Create a NSG Rule successfully.")
     else :
-        logging.error("PUT a NSG Rule failed")
+        logging.error("PUT a NSG Rule failed.")
         
     return res.status_code
 
