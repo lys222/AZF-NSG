@@ -21,16 +21,16 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     nsg_id = req_body['NSG']
     dst_ip = req_body['privateIP']
     dst_port = req_body['dst_port']
+    protocol = req_body['protocol']
     src_ip = req_body['src_ip']
 
+    #src_ip가 리스트형인지, 문자열인지 확인
     try :
         temp = json.loads(src_ip)
     except :
         temp = src_ip
     finally :
         src_ip = temp
-
-    protocol = req_body['protocol']
 
     logging.info('GET parameters from Logic Apps.')
     logging.info('nsg_id : %s, dst_ip : %s, dst_port : %s, src_ip : %s, protocol: %s',nsg_id,dst_ip,dst_port,src_ip,protocol)
@@ -59,6 +59,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     #* 로직앱에 던져 줄 값 : 상태 코드, 수정 및 생성 된 규칙 내용
     if result and r_JSON :
+        r_JSON["name"] = rule_name
         return func.HttpResponse(
             str(json.dumps(r_JSON)),
             status_code=result
@@ -137,7 +138,7 @@ def update_or_append_a_rule(NSG_Rules, private_IP, src_ip, dst_port, protocol):
         else: #새로운 rule 추가
             continue
 
-    name = f"MDCAutomation_src_{src_ip}_{private_IP}_ALL_ALL_deny_ 시간"
+    # name = f"MDCAutomation_src_{src_ip}_{private_IP}_ALL_ALL_deny_ 시간"
     return None, write_JSON(private_IP, dst_port, src_ip, search_unoccupied_priority(NSG_Rules), "*")
     #?이미 같은 룰이 있는데 보안 경고가 울린 경우는?? 이 경우도 고려해야할지?       
 
@@ -222,7 +223,7 @@ def check_src_ip(rule, src_ip):
                 else :
                     rule["sourceAddressPrefixes"].append(src_ip)
                     return True, rule["sourceAddressPrefixes"]
-            if type(src_ip) is list: #!범위에 복수 src_IP를 포함하는 경우
+            if type(src_ip) is list :
                 set_a = set(src_ip)
                 set_b = set(rule["sourceAddressPrefixes"])
                 result_set = list(set_a - set_b)
