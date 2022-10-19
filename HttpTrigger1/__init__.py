@@ -22,6 +22,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     dst_ip = req_body['privateIP']
     dst_port = req_body['dst_port']
     src_ip = req_body['src_ip']
+
+    try :
+        temp = json.loads(src_ip)
+    except :
+        temp = src_ip
+    finally :
+        src_ip = temp
+
     protocol = req_body['protocol']
 
     logging.info('GET parameters from Logic Apps.')
@@ -52,8 +60,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     #* 로직앱에 던져 줄 값 : 상태 코드, 수정 및 생성 된 규칙 내용
     if result and r_JSON :
         return func.HttpResponse(
-            "This HTTP triggered function executed. Check status_code.",
-            status_code=result #, body=r_JSON
+            str(json.dumps(r_JSON)),
+            status_code=result
         )
         exit()
 
@@ -214,14 +222,15 @@ def check_src_ip(rule, src_ip):
                 else :
                     rule["sourceAddressPrefixes"].append(src_ip)
                     return True, rule["sourceAddressPrefixes"]
-            if type(src_ip) is list: #범위에 복수 src_IP를 포함하는 경우
+            if type(src_ip) is list: #!범위에 복수 src_IP를 포함하는 경우
                 set_a = set(src_ip)
                 set_b = set(rule["sourceAddressPrefixes"])
-                result_set = set_a - set_b
+                result_set = list(set_a - set_b)
                 if not result_set:
                     return False, rule["sourceAddressPrefixes"]
-                rule["sourceAddressPrefixes"].extend(result_set)
-                return True, rule["sourceAddressPrefixes"] #리스트에 ip를 추가해야할 경우
+                else :
+                    rule["sourceAddressPrefixes"].extend(result_set)
+                    return True, rule["sourceAddressPrefixes"] #리스트에 ip를 추가해야할 경우
     except KeyError:
         logging.warning('"sourceAddressPrefixes" does not exist.')
 
